@@ -1,0 +1,65 @@
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+  PENDING
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+  PROVIDER
+}
+
+model User {
+  id        String     @id @default(uuid())
+  status    UserStatus @default(ACTIVE)
+  role      UserRole  @default(USER)
+  name      String
+  email     String     @unique
+  password  String
+  isDeleted Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+   payment         Payment?
+  otpVerification OtpVerification?
+
+    conversations1   Conversation[] @relation("User1Conversations")
+  conversations2   Conversation[] @relation("User2Conversations")
+
+  sentMessages     Message[]   @relation("SentMessages")
+  receivedMessages Message[]   @relation("ReceivedMessages")
+}
+
+
+model Conversation {
+  id        String   @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+
+  user1     User     @relation("User1Conversations", fields: [user1Id], references: [id])
+  user2     User     @relation("User2Conversations", fields: [user2Id], references: [id])
+  messages  Message[]
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  text           String
+  senderId       String
+  receiverId     String
+  conversationId String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime    @default(now())
+
+  sender         User        @relation("SentMessages", fields: [senderId], references: [id])
+  receiver       User        @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+}
+
+
+
+
+
