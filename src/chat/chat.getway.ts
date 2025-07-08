@@ -13,7 +13,6 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from './chat.service';
 
-
 type MessagePayload = {
   text: string;
   sender: string;
@@ -73,6 +72,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       conversation = await this.prisma.conversation.create({
         data: { user1Id, user2Id },
       });
+
+      const [senderUser, receiverUser] = await Promise.all([
+        this.prisma.user.findUnique({ where: { id: sender } }),
+        this.prisma.user.findUnique({ where: { id: receiver } }),
+      ]);
+
+      const newChatUserForReceiver = {
+        id: senderUser?.id,
+        name: senderUser?.name,
+        hasGoogleAccount: true,
+        unreadCount: 1,
+      };
+
+      const newChatUserForSender = {
+        id: receiverUser?.id,
+        name: receiverUser?.name,
+        hasGoogleAccount: true,
+        unreadCount: 0,
+      };
+
+      const [receiverSocketId, senderSocketId] = await Promise.all([
+        this.redisService.hGet('userSocketMap', receiver),
+        this.redisService.hGet('userSocketMap', sender),
+      ]);
+
+      if (receiverSocketId) {
+        this.server
+          .to(receiverSocketId)
+          .emit('newConversation', newChatUserForReceiver);
+      }
+
+      if (senderSocketId) {
+        this.server
+          .to(senderSocketId)
+          .emit('newConversation', newChatUserForSender);
+      }
     }
 
     const receiverActiveWith = await this.redisService.hGet(
@@ -88,6 +123,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         conversationId: conversation.id,
         isRead: receiverActiveWith === sender,
       },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
     });
 
     const receiverSocketId = await this.redisService.hGet(
@@ -168,7 +208,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       where: {
         OR: [{ user1Id: userId }, { user2Id: userId }],
       },
+      orderBy: {
+        lastMessageAt: 'desc',
+      },
     });
+  if (!conversations) {
+    client.emit('conversationsLoaded', []);
+    return;
+  }
 
     const userIds = conversations.map((c) =>
       c.user1Id === userId ? c.user2Id : c.user1Id,

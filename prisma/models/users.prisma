@@ -39,6 +39,8 @@ model Conversation {
   user1Id   String
   user2Id   String
   createdAt DateTime @default(now())
+  lastMessageAt DateTime?  @default(now())
+
 
   user1     User     @relation("User1Conversations", fields: [user1Id], references: [id])
   user2     User     @relation("User2Conversations", fields: [user2Id], references: [id])
